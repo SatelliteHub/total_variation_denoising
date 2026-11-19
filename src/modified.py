@@ -2,10 +2,12 @@
 import numpy as np
 
 if __package__:
-    from .baseline import denoise_tv, estimate_sigma, make_image
+    from .baseline import denoise_tv
+    from .data import estimate_sigma, make_image
     from .metrics import mean_squared_error, psnr
 else:
-    from baseline import denoise_tv, estimate_sigma, make_image
+    from baseline import denoise_tv
+    from data import estimate_sigma, make_image
     from metrics import mean_squared_error, psnr
 
 

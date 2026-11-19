@@ -8,8 +8,10 @@
 import numpy as np
 
 if __package__:
+    from .data import estimate_sigma, make_image
     from .metrics import mean_squared_error, psnr
 else:
+    from data import estimate_sigma, make_image
     from metrics import mean_squared_error, psnr
 
 
@@ -179,62 +181,6 @@ def rof_objective(noisy_image, reconstructed_image, weight):
     smoothness_cost = weight * isotropic_tv(reconstructed)
 
     return float(data_cost + smoothness_cost)
-
-
-def make_image(seed, size=96, sigma=0.1):
-    # Make the handout's clean image with four rectangles and two disks
-    # Add Gaussian noise without clipping the pixel values
-    # Return the clean and noisy images with shape size by size
-    if isinstance(size, (bool, np.bool_)) or not isinstance(
-        size, (int, np.integer)
-    ):
-        raise ValueError("size must be an integer of at least 32.")
-    size = int(size)
-    if size < 32:
-        raise ValueError("size must be at least 32.")
-
-    try:
-        sigma = float(sigma)
-    except (TypeError, ValueError, OverflowError) as error:
-        raise ValueError("sigma must be a finite non-negative number.") from error
-    if not np.isfinite(sigma) or sigma < 0.0:
-        raise ValueError("sigma must be a finite non-negative number.")
-
-    rng = np.random.default_rng(seed)
-    clean = np.full((size, size), 0.15, dtype=np.float64)
-    yy, xx = np.mgrid[:size, :size]
-
-    for _ in range(4):
-        row, col = rng.integers(0, size - 20, size=2)
-        height, width = rng.integers(10, 22, size=2)
-        clean[row : row + height, col : col + width] = rng.uniform(0.3, 0.9)
-
-    for _ in range(2):
-        cy, cx = rng.integers(15, size - 15, size=2)
-        radius = rng.integers(6, 14)
-        mask = (yy - cy) ** 2 + (xx - cx) ** 2 < radius**2
-        clean[mask] = rng.uniform(0.3, 0.9)
-
-    noisy = clean + sigma * rng.normal(size=clean.shape)
-
-    return clean, noisy
-
-
-def estimate_sigma(noisy_image):
-    # Estimate noise from alternating horizontal pixel pairs
-    # Edges and texture can affect the estimate
-    noisy = check_image(noisy_image)
-    if noisy.shape[1] < 2:
-        raise ValueError("Noise estimation needs an image at least two columns wide.")
-
-    usable_width = 2 * (noisy.shape[1] // 2)
-    differences = (
-        noisy[:, 1:usable_width:2] - noisy[:, :usable_width:2]
-    ) / np.sqrt(2.0)
-    centre = np.median(differences)
-    mad = np.median(np.abs(differences - centre))
-
-    return float(mad / 0.67449)
 
 
 def run_demo(seed=0, size=96, sigma=0.1, weight=0.12, n_iter=200, debug=True):

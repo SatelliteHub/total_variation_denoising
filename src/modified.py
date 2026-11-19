@@ -67,13 +67,15 @@ def denoise_tv_adaptive(
 
 
 def run_demo(
-    seed=0,
-    size=96,
-    sigma=0.1,
-    baseline_weight=0.12,
-    alpha=1.0,
-    n_iter=200,
-    debug=True,
+    seed = 0,
+    size = 96,
+    sigma = 0.1,
+    ###########################################################################
+    baseline_weight = 0.10,     # Change value to see effect on baseline method
+    alpha = 1.0,                # Change value to see effect on adaptive method
+    ###########################################################################
+    n_iter = 200,
+    debug = True,
 ):
     # Compare both methods on the same noisy image
     # Demo values are starting points and should be chosen with validation images

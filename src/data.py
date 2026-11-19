@@ -40,6 +40,28 @@ def make_image(seed, size=96, sigma=0.1):
     return clean, noisy
 
 
+# Add a small checkerboard texture to the centre of a synthetic image
+# Keep the same Gaussian noise across the whole image
+# Return the clean image, noisy image and texture region
+def make_texture_stress_image(seed, size=96, sigma=0.1):
+    clean, noisy = make_image(seed=seed, size=size, sigma=sigma)
+    noise = noisy - clean
+
+    patch_size = min(size, max(16, size // 3))
+    start = (size - patch_size) // 2
+    stop = start + patch_size
+    texture_region = (slice(start, stop), slice(start, stop))
+
+    row, col = np.mgrid[:patch_size, :patch_size]
+    checkerboard = ((row // 2 + col // 2) % 2) * 2 - 1
+    texture_patch = 0.5 + 0.16 * checkerboard
+
+    clean[texture_region] = texture_patch
+    noisy[texture_region] = texture_patch + noise[texture_region]
+
+    return clean, noisy, texture_region
+
+
 # Estimate noise from alternating horizontal pixel pairs
 # Edges and texture can affect the estimate
 def estimate_sigma(noisy_image):

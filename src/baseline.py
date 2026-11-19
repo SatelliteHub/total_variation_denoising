@@ -7,6 +7,11 @@
 
 import numpy as np
 
+if __package__:
+    from .metrics import mean_squared_error, psnr
+else:
+    from metrics import mean_squared_error, psnr
+
 
 def check_image(image):
     # Check the image and return it as a finite two dimensional float array
@@ -230,33 +235,6 @@ def estimate_sigma(noisy_image):
     mad = np.median(np.abs(differences - centre))
 
     return float(mad / 0.67449)
-
-
-def mean_squared_error(reference_image, estimate_image):
-    # Find the average squared difference between two images
-    reference = check_image(reference_image)
-    estimate = check_image(estimate_image)
-    if reference.shape != estimate.shape:
-        raise ValueError("The two images must have the same shape.")
-
-    return float(np.mean((estimate - reference) ** 2))
-
-
-def psnr(reference_image, estimate_image, data_range=1.0):
-    # Return peak signal to noise ratio in decibels
-    # An exact match has infinite PSNR
-    try:
-        data_range = float(data_range)
-    except (TypeError, ValueError, OverflowError) as error:
-        raise ValueError("data_range must be a finite positive number.") from error
-    if not np.isfinite(data_range) or data_range <= 0.0:
-        raise ValueError("data_range must be a finite positive number.")
-
-    error = mean_squared_error(reference_image, estimate_image)
-    if error == 0.0:
-        return float("inf")
-
-    return float(10.0 * np.log10((data_range**2) / error))
 
 
 def run_demo(seed=0, size=96, sigma=0.1, weight=0.12, n_iter=200, debug=True):

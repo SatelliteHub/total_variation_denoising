@@ -50,6 +50,7 @@ def _read_test_results(path):
     Input is the path to a CSV file
     Return one dictionary for each test case
     """
+    # Resolve the input path from the project folder
     results_path = _project_path(path)
     try:
         with results_path.open("r", newline="", encoding="utf-8") as results_file:
@@ -74,6 +75,7 @@ def _read_test_results(path):
         "baseline_psnr",
         "adaptive_psnr",
     }
+    # Check that the CSV has every column needed for the summary
     missing = required - set(rows[0])
     if missing:
         raise ValueError(f"The results CSV is missing columns: {sorted(missing)}")
@@ -87,6 +89,7 @@ def _one_value(rows, name):
     Input is a list of result rows and a field name
     Return the field value as a float
     """
+    # One plot needs one shared setting across all result rows
     values = {float(row[name]) for row in rows}
     if len(values) != 1:
         raise ValueError(f"The results CSV has more than one {name} value")
@@ -103,7 +106,7 @@ def _bootstrap_mean_interval(values, rng, samples):
     if values.size == 1:
         return float(values[0]), float(values[0])
 
-    # Resample the values to estimate the mean bounds
+    # Resample cases to estimate how much the mean may change
     indices = rng.integers(0, values.size, size=(samples, values.size))
     means = np.mean(values[indices], axis=1)
     lower, upper = np.percentile(means, [2.5, 97.5])
@@ -116,6 +119,7 @@ def _summarise(rows, samples, random_seed):
     Input is the test rows and bootstrap settings
     Return one summary dictionary for each noise level
     """
+    # Group results so each noise level gets its own summary
     grouped = defaultdict(list)
     for row in rows:
         grouped[float(row["noise_sigma"])].append(row)
@@ -134,6 +138,7 @@ def _summarise(rows, samples, random_seed):
         adaptive_mse = np.asarray(
             [float(row["adaptive_mse"]) for row in group], dtype=np.float64
         )
+        # Positive gains mean the adaptive method has lower error
         mse_gain = baseline_mse - adaptive_mse
         psnr_gain = np.asarray(
             [float(row["adaptive_psnr"]) - float(row["baseline_psnr"]) for row in group],
@@ -187,6 +192,7 @@ def _save_summary_figure(summary, path, baseline_weight, alpha, iterations):
     gain_low = np.asarray([row["paired_mse_gain_ci_lower"] for row in summary])
     gain_high = np.asarray([row["paired_mse_gain_ci_upper"] for row in summary])
 
+    # Use one panel for scores and one for paired improvements
     figure, axes = plt.subplots(1, 2, figsize=(11, 4.5), constrained_layout=True)
     axes[0].errorbar(
         x_positions,
@@ -257,6 +263,7 @@ def _save_example_figure(
     Input is the image seed noise level and denoising settings
     Save a PNG with clean noisy and reconstructed images
     """
+    # Rebuild the same example from its saved seed
     clean, noisy = make_image(seed=seed, size=image_size, sigma=sigma)
     baseline = denoise_tv(
         noisy.copy(), weight=baseline_weight, n_iter=iterations
@@ -265,6 +272,7 @@ def _save_example_figure(
         noisy.copy(), alpha=alpha, n_iter=iterations
     )
 
+    # Show every method on the same example image
     images = (clean, noisy, baseline, adaptive)
     titles = (
         "Clean image",
@@ -346,6 +354,7 @@ def main():
     Input comes from the command line
     Save two figures and one CSV file
     """
+    # Read results and compute summary scores before making figures
     args = _parse_args()
     try:
         rows = _read_test_results(args.results)
@@ -357,6 +366,7 @@ def main():
     except ValueError as error:
         raise SystemExit(str(error)) from error
 
+    # Make sure the requested example is included in the test results
     example_exists = any(
         int(row["seed"]) == args.example_seed
         and float(row["noise_sigma"]) == args.example_sigma
@@ -370,12 +380,14 @@ def main():
     summary_path = _project_path(args.summary)
     comparison_path = _project_path(args.comparison_figure)
     example_path = _project_path(args.example_figure)
+    # Create the output folder before saving the summary files
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     with summary_path.open("w", newline="", encoding="utf-8") as summary_file:
         writer = csv.DictWriter(summary_file, fieldnames=SUMMARY_FIELDS)
         writer.writeheader()
         writer.writerows(summary)
 
+    # Save the overall results and one example image comparison
     _save_summary_figure(
         summary,
         comparison_path,

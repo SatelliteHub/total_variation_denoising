@@ -1,3 +1,5 @@
+"""Create figures and summaries from saved test results"""
+
 import argparse
 import csv
 from collections import defaultdict
@@ -31,6 +33,11 @@ SUMMARY_FIELDS = [
 
 
 def _project_path(path):
+    """Resolve a path from the project folder
+
+    Input is an absolute or relative path
+    Return the full path
+    """
     project_root = Path(__file__).resolve().parent
     if path.is_absolute():
         return path
@@ -38,6 +45,11 @@ def _project_path(path):
 
 
 def _read_test_results(path):
+    """Read and check paired test results
+
+    Input is the path to a CSV file
+    Return one dictionary for each test case
+    """
     results_path = _project_path(path)
     try:
         with results_path.open("r", newline="", encoding="utf-8") as results_file:
@@ -70,6 +82,11 @@ def _read_test_results(path):
 
 
 def _one_value(rows, name):
+    """Check that a field has one value in all rows
+
+    Input is a list of result rows and a field name
+    Return the field value as a float
+    """
     values = {float(row[name]) for row in rows}
     if len(values) != 1:
         raise ValueError(f"The results CSV has more than one {name} value")
@@ -77,10 +94,16 @@ def _one_value(rows, name):
 
 
 def _bootstrap_mean_interval(values, rng, samples):
+    """Estimate 95 percent bounds for the mean
+
+    Input is a list of values and a random generator
+    Return lower and upper bounds as floats
+    """
     values = np.asarray(values, dtype=np.float64)
     if values.size == 1:
         return float(values[0]), float(values[0])
 
+    # Resample the values to estimate the mean bounds
     indices = rng.integers(0, values.size, size=(samples, values.size))
     means = np.mean(values[indices], axis=1)
     lower, upper = np.percentile(means, [2.5, 97.5])
@@ -88,6 +111,11 @@ def _bootstrap_mean_interval(values, rng, samples):
 
 
 def _summarise(rows, samples, random_seed):
+    """Summarise paired metrics for each noise level
+
+    Input is the test rows and bootstrap settings
+    Return one summary dictionary for each noise level
+    """
     grouped = defaultdict(list)
     for row in rows:
         grouped[float(row["noise_sigma"])].append(row)
@@ -140,6 +168,11 @@ def _summarise(rows, samples, random_seed):
 
 
 def _save_summary_figure(summary, path, baseline_weight, alpha, iterations):
+    """Save the overall test comparison figure
+
+    Input is the summary and the figure settings
+    Save a PNG figure with confidence intervals
+    """
     sigmas = np.asarray([row["noise_sigma"] for row in summary])
     x_positions = np.arange(sigmas.size)
     baseline_mean = np.asarray([row["baseline_mean_mse"] for row in summary])
@@ -219,6 +252,11 @@ def _save_summary_figure(summary, path, baseline_weight, alpha, iterations):
 def _save_example_figure(
     path, seed, sigma, image_size, iterations, baseline_weight, alpha
 ):
+    """Save one normal test image comparison
+
+    Input is the image seed noise level and denoising settings
+    Save a PNG with clean noisy and reconstructed images
+    """
     clean, noisy = make_image(seed=seed, size=image_size, sigma=sigma)
     baseline = denoise_tv(
         noisy.copy(), weight=baseline_weight, n_iter=iterations
@@ -252,6 +290,11 @@ def _save_example_figure(
 
 
 def _parse_args():
+    """Read and check the figure settings
+
+    Input comes from the command line
+    Return all settings in one namespace
+    """
     parser = argparse.ArgumentParser(
         description="Create reproducible figures from saved TV test results"
     )
@@ -298,6 +341,11 @@ def _parse_args():
 
 
 def main():
+    """Create the test figures and summary table
+
+    Input comes from the command line
+    Save two figures and one CSV file
+    """
     args = _parse_args()
     try:
         rows = _read_test_results(args.results)
@@ -335,6 +383,7 @@ def main():
         alpha,
         iterations,
     )
+    # Recreate the example from its seed for a repeatable figure
     _save_example_figure(
         example_path,
         args.example_seed,

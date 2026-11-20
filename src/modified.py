@@ -1,21 +1,19 @@
 
+"""Denoise images with a noise adaptive TV weight"""
+
 import numpy as np
 
-if __package__:
-    from .baseline import denoise_tv
-    from .data import estimate_sigma, make_image
-    from .metrics import mean_squared_error, psnr
-else:
-    from baseline import denoise_tv
-    from data import estimate_sigma, make_image
-    from metrics import mean_squared_error, psnr
-
-
-# Modified method that adapts the TV weight to the estimated noise
-# Tune alpha on validation images and relate the rule to cited parameter selection work
-
+from src.baseline import denoise_tv
+from src.data import estimate_sigma, make_image
+from src.metrics import mean_squared_error, psnr
 
 def _check_alpha(alpha):
+    """Check the adaptive scale
+
+    Input is one finite positive number
+    Return alpha as a float
+    """
+    # Convert numeric text as well as number inputs
     try:
         value = float(alpha)
     except (TypeError, ValueError, OverflowError) as error:
@@ -34,11 +32,16 @@ def denoise_tv_adaptive(
     tau=1.0 / 8.0,
     debug=False,
 ):
-    # Estimate noise and use it to choose the regularisation weight
-    # Keep Chambolle's baseline updates unchanged
-    # Return the image, noise estimate and weight used
+    """Denoise an image with a noise adaptive weight
+
+    Input is a noisy 2D image and the adaptive settings
+    Return the denoised image with the same shape
+    Also return the noise estimate and selected weight
+    """
     alpha = _check_alpha(alpha)
+    # Estimate noise from neighbouring pixel pairs
     sigma_estimate = estimate_sigma(noisy_image)
+    # Set more smoothing when the estimated noise is higher
     weight = max(alpha * sigma_estimate, 1e-8)
 
     if debug:
@@ -59,18 +62,20 @@ def denoise_tv_adaptive(
 
 
 def run_demo(
-    seed = 0,
-    size = 96,
-    ###########################################################################
-    sigma = 0.20,               # Noise level
-    baseline_weight = 0.10,     # Change value to see effect on baseline method
-    alpha = 1.0,                # Change value to see effect on adaptive method
-    ###########################################################################
-    n_iter = 200,
-    debug = True,
+    seed=0,
+    size=96,
+    sigma=0.20,
+    baseline_weight=0.10,
+    alpha=1.0,
+    n_iter=200,
+    debug=True,
 ):
-    # Compare both methods on the same noisy image
-    # Demo values are starting points and should be chosen with validation images
+    """Compare the fixed and adaptive methods on one image
+
+    Input settings choose the image and denoising strengths
+    Print image scores and show the comparison figure
+    """
+    # Both methods use this same noisy image for a fair comparison
     clean, noisy = make_image(seed=seed, size=size, sigma=sigma)
     baseline_result = denoise_tv(
         noisy,
@@ -108,6 +113,7 @@ def run_demo(
     except ImportError:
         print("Install matplotlib to display the comparison images.")
     else:
+        # Show the input and both denoising results side by side
         images = (clean, noisy, baseline_result, adaptive_result)
         titles = ("Clean image", "Noisy image", "Fixed weight", "Adaptive weight")
         fig, axes = plt.subplots(1, 4, figsize=(15, 4), constrained_layout=True)

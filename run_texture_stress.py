@@ -1,3 +1,5 @@
+"""Run a checkerboard texture stress experiment"""
+
 import argparse
 import csv
 import json
@@ -48,6 +50,12 @@ RESULT_FIELDS = [
 
 
 def _project_path(path):
+    """Resolve a path from the project folder
+
+    Input is an absolute or relative path
+    Return the full path
+    """
+    # Save relative paths inside the project folder
     project_root = Path(__file__).resolve().parent
     if path.is_absolute():
         return path
@@ -55,6 +63,12 @@ def _project_path(path):
 
 
 def _load_config(path):
+    """Load settings selected with validation images
+
+    Input is the path to a JSON file
+    Return the selected settings as a dictionary
+    """
+    # Read the settings chosen with validation images
     config_path = _project_path(path)
     try:
         with config_path.open("r", encoding="utf-8") as config_file:
@@ -73,6 +87,12 @@ def _load_config(path):
 
 
 def _timed_run(function, repeats):
+    """Measure repeated runs of one function
+
+    Input is a function with no arguments and a repeat count
+    Return the last result and the median time in seconds
+    """
+    # Warm up before starting the timer
     function()
     durations = []
     result = None
@@ -86,17 +106,25 @@ def _timed_run(function, repeats):
 
 
 def _texture_retention(clean, result, texture_region):
+    """Measure the texture left after denoising
+
+    Input is the clean image result and checkerboard region
+    Return the contrast retention and correlation
+    """
     clean_patch = clean[texture_region]
     result_patch = result[texture_region]
+    # Standard deviation measures how much contrast the patch has
     clean_std = float(np.std(clean_patch))
     result_std = float(np.std(result_patch))
     if clean_std == 0.0:
         return float("nan"), float("nan")
 
+    # Compare the patch contrast before and after denoising
     retention = result_std / clean_std
     if result_std == 0.0:
         correlation = 0.0
     else:
+        # Flatten both patches so matching pixels can be compared
         correlation = float(
             np.corrcoef(clean_patch.ravel(), result_patch.ravel())[0, 1]
         )
@@ -105,10 +133,16 @@ def _texture_retention(clean, result, texture_region):
 
 
 def _save_example(path, clean, noisy, baseline, adaptive, texture_region, seed, sigma):
+    """Save a figure of the texture stress example
+
+    Input is the image set and checkerboard region
+    Save a PNG with full images and a close up
+    """
     images = (clean, noisy, baseline, adaptive)
     titles = ("Clean", "Noisy", "Fixed weight", "Noise adaptive")
     figure, axes = plt.subplots(2, 4, figsize=(13, 6), constrained_layout=True)
 
+    # The first row shows whole images and the second row shows the patch
     for column, (image, title) in enumerate(zip(images, titles)):
         axes[0, column].imshow(
             image, cmap="gray", vmin=0.0, vmax=1.0, interpolation="nearest"
@@ -133,6 +167,11 @@ def _save_example(path, clean, noisy, baseline, adaptive, texture_region, seed, 
 
 
 def _parse_args():
+    """Read and check the stress run settings
+
+    Input comes from the command line
+    Return all settings in one namespace
+    """
     parser = argparse.ArgumentParser(
         description="Compare TV denoisers on synthetic images with fine texture"
     )
@@ -177,12 +216,19 @@ def _parse_args():
 
 
 def main():
+    """Run the checkerboard cases and save the results
+
+    Input comes from the command line
+    Save paired scores and one example figure
+    """
+    # Read settings and load values chosen on validation images
     args = _parse_args()
     try:
         config = _load_config(args.config)
     except ValueError as error:
         raise SystemExit(str(error)) from error
 
+    # Use command line overrides when supplied and saved values otherwise
     baseline_weight = float(config["baseline_weight"])
     alpha = float(config["alpha"])
     iterations = int(
@@ -206,9 +252,11 @@ def main():
         f"Seeds: {args.seed_start} to {args.seed_start + args.num_seeds - 1}"
     )
 
+    # Keep one result row for each random image
     rows = []
     for seed in range(args.seed_start, args.seed_start + args.num_seeds):
         print(f"Running checkerboard stress case with seed {seed}")
+        # Use the same checkerboard image for both denoising methods
         clean, noisy, texture_region = make_texture_stress_image(
             seed=seed,
             size=image_size,
@@ -216,6 +264,10 @@ def main():
         )
 
         def run_baseline():
+            """Run baseline denoising on the current image
+
+            Return an image with the same shape as the input
+            """
             return denoise_tv(
                 noisy.copy(),
                 weight=baseline_weight,
@@ -223,12 +275,17 @@ def main():
             )
 
         def run_adaptive():
+            """Run adaptive denoising on the current image
+
+            Return the image noise estimate and selected weight
+            """
             return denoise_tv_adaptive(
                 noisy.copy(),
                 alpha=alpha,
                 n_iter=iterations,
             )
 
+        # Compare both outputs and time them on the same noisy input
         baseline_result, baseline_runtime = _timed_run(
             run_baseline, args.timing_repeats
         )
@@ -242,6 +299,7 @@ def main():
         adaptive_texture_retention, adaptive_texture_correlation = _texture_retention(
             clean, adaptive_result, texture_region
         )
+        # Measure scores inside the checkerboard patch as well as the full image
         clean_patch = clean[texture_region]
         noisy_patch = noisy[texture_region]
         baseline_patch = baseline_result[texture_region]
@@ -250,6 +308,7 @@ def main():
             clean, noisy, texture_region
         )
 
+        # Save whole image scores, patch scores and run times together
         rows.append(
             {
                 "seed": seed,
@@ -288,6 +347,7 @@ def main():
             }
         )
 
+        # Save one example figure rather than a figure for every seed
         if seed == args.seed_start:
             _save_example(
                 figure_path,
@@ -300,6 +360,7 @@ def main():
                 args.sigma,
             )
 
+    # Write one CSV row for each stress case
     with output_path.open("w", newline="", encoding="utf-8") as output_file:
         writer = csv.DictWriter(output_file, fieldnames=RESULT_FIELDS)
         writer.writeheader()

@@ -1,22 +1,19 @@
-# Baseline greyscale total variation denoising
-# Uses Chambolle's dual fixed point method for the ROF objective
-# The objective adds weighted TV to half the squared image error
-# The gradient uses forward differences and is zero at the bottom and right edges
-# The divergence is the negative adjoint of the gradient
-# Each update and the working memory grow with the number of pixels
+# Baseline isotropic TV denoising with the Chambolle dual method
+# Images are 2D greyscale arrays
+"""Tools for baseline total variation denoising"""
 
 import numpy as np
 
-if __package__:
-    from .data import estimate_sigma, make_image
-    from .metrics import mean_squared_error, psnr
-else:
-    from data import estimate_sigma, make_image
-    from metrics import mean_squared_error, psnr
+from src.data import estimate_sigma, make_image
+from src.metrics import mean_squared_error, psnr
 
 
 def check_image(image):
-    # Check the image and return it as a finite two dimensional float array
+    """Check a greyscale image
+
+    Input is a 2D array with shape height by width
+    Return a finite float array with the same shape
+    """
     img = np.asarray(image, dtype=np.float64)
 
     if img.ndim != 2:
@@ -30,7 +27,12 @@ def check_image(image):
 
 
 def _check_weight(weight):
-    # Check that the ROF regularisation weight is finite and positive
+    """Check the regularisation weight
+
+    Input is one finite positive number
+    Return the weight as a float
+    """
+    # Convert numeric text as well as number inputs
     try:
         value = float(weight)
     except (TypeError, ValueError, OverflowError) as error:
@@ -43,22 +45,31 @@ def _check_weight(weight):
 
 
 def grad(image):
-    # Find brightness changes to the pixel below and the pixel to the right
-    # The last row and last column have zero differences
+    """Find changes between neighbouring pixels
+
+    Input is a 2D image
+    Return row and column differences with the same shape
+    The last row and column of differences are zero
+    """
     img = check_image(image)
 
     row_diff = np.zeros_like(img)
     col_diff = np.zeros_like(img)
 
+    # Compare each pixel with the pixel below it
     row_diff[:-1, :] = img[1:, :] - img[:-1, :]
+    # Compare each pixel with the pixel to its right
     col_diff[:, :-1] = img[:, 1:] - img[:, :-1]
 
     return row_diff, col_diff
 
 
 def div(px, py):
-    # Combine the row and column flows at each pixel
-    # Both flow arrays must have the same shape
+    """Combine row and column fields into one image
+
+    Input fields must be 2D arrays with the same shape
+    Return one divergence array with that shape
+    """
     px = check_image(px)
     py = check_image(py)
     if px.shape != py.shape:
@@ -66,8 +77,10 @@ def div(px, py):
 
     result = np.zeros_like(px)
 
+    # Add vertical flow to one pixel and subtract it from the next row
     result[:-1, :] += px[:-1, :]
     result[1:, :] -= px[:-1, :]
+    # Apply the same rule to horizontal flow and the next column
     result[:, :-1] += py[:, :-1]
     result[:, 1:] -= py[:, :-1]
 
@@ -75,8 +88,13 @@ def div(px, py):
 
 
 def isotropic_tv(image):
-    # Add the length of the row and column change at each pixel
+    """Measure total variation in a greyscale image
+
+    Input is a 2D image
+    Return one total variation value as a float
+    """
     row_diff, col_diff = grad(image)
+    # Combine both directional changes at each pixel
     gradient_lengths = np.hypot(row_diff, col_diff)
     total_variation = np.sum(gradient_lengths)
 
@@ -84,11 +102,11 @@ def isotropic_tv(image):
 
 
 def denoise_tv(noisy_image, weight, n_iter, tau=1.0 / 8.0, debug=False):
-    # Denoise the image with Chambolle's dual fixed point updates
-    # The method minimises half the squared error plus weight times TV
-    # Larger weights usually smooth the image more
-    # Tau must be positive and no greater than one eighth
-    # Set debug to True to print progress and checks
+    """Denoise an image with the fixed point method by Chambolle
+
+    Input is a noisy 2D image and the regularisation settings
+    Return a denoised float array with the same shape
+    """
     noisy = check_image(noisy_image)
     weight = _check_weight(weight)
 
@@ -106,6 +124,7 @@ def denoise_tv(noisy_image, weight, n_iter, tau=1.0 / 8.0, debug=False):
     if not np.isfinite(tau) or tau <= 0.0 or tau > 1.0 / 8.0:
         raise ValueError("tau must be positive and no larger than 1/8.")
 
+    # Store the two parts of the dual field for the row and column directions
     px = np.zeros_like(noisy)
     py = np.zeros_like(noisy)
 
@@ -120,12 +139,16 @@ def denoise_tv(noisy_image, weight, n_iter, tau=1.0 / 8.0, debug=False):
             f"mean={noisy.mean():.6f}"
         )
 
+    # Print progress about ten times when debugging is switched on
     progress_step = max(1, n_iter // 10)
     for iteration in range(1, n_iter + 1):
+        # Combine the dual field with the noisy image before taking its gradient
         field = div(px, py) - noisy / weight
         gx, gy = grad(field)
 
+        # Find the gradient length at every pixel
         magnitude = np.hypot(gx, gy)
+        # Scale each update so the dual vector stays within its allowed length
         denominator = 1.0 + tau * magnitude
         next_px = (px + tau * gx) / denominator
         next_py = (py + tau * gy) / denominator
@@ -145,6 +168,7 @@ def denoise_tv(noisy_image, weight, n_iter, tau=1.0 / 8.0, debug=False):
 
         px, py = next_px, next_py
 
+    # Use the final dual field to recover the denoised image
     reconstructed = noisy - weight * div(px, py)
 
     if debug:
@@ -170,13 +194,18 @@ def denoise_tv(noisy_image, weight, n_iter, tau=1.0 / 8.0, debug=False):
 
 
 def rof_objective(noisy_image, reconstructed_image, weight):
-    # Score the image fit and the amount of variation in the result
+    """Score the data fit and image smoothness
+
+    Input images must have the same 2D shape
+    Return the ROF objective as a float
+    """
     noisy = check_image(noisy_image)
     reconstructed = check_image(reconstructed_image)
     if noisy.shape != reconstructed.shape:
         raise ValueError("The two images must have the same shape.")
     weight = _check_weight(weight)
 
+    # Add the fit cost to the weighted smoothness cost
     data_cost = 0.5 * np.sum((reconstructed - noisy) ** 2)
     smoothness_cost = weight * isotropic_tv(reconstructed)
 
@@ -184,8 +213,11 @@ def rof_objective(noisy_image, reconstructed_image, weight):
 
 
 def run_demo(seed=0, size=96, sigma=0.1, weight=0.12, n_iter=200, debug=True):
-    # Show one example with a fixed baseline weight
-    # The noise estimate is reported but does not change the weight
+    """Show one baseline denoising example
+
+    Input settings choose the image and denoising strength
+    Print image scores and show the comparison figure
+    """
     clean, noisy = make_image(seed=seed, size=size, sigma=sigma)
     sigma_estimate = estimate_sigma(noisy)
     reconstructed = denoise_tv(

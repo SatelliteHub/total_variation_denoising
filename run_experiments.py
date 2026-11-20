@@ -1,3 +1,5 @@
+"""Run paired TV denoising experiments"""
+
 import argparse
 import csv
 import json
@@ -13,6 +15,7 @@ from src.metrics import mean_squared_error, psnr
 from src.modified import denoise_tv_adaptive
 
 
+# Keep the random seeds separate for each type of experiment
 SEED_STARTS = {
     "development": 0,
     "validation": 1000,
@@ -43,12 +46,18 @@ CSV_FIELDS = [
 ]
 
 
-# Run a function once to warm it up and then return its median time and result
 def _timed_run(function, repeats):
+    """Measure repeated runs of one function
+
+    Input is a function with no arguments and a repeat count
+    Return the last result and the median time in seconds
+    """
+    # Warm up the function before measuring its speed
     function()
     durations = []
     result = None
 
+    # Repeat the timed run to reduce the effect of one slow measurement
     for _ in range(repeats):
         start = perf_counter()
         result = function()
@@ -57,12 +66,17 @@ def _timed_run(function, repeats):
     return result, median(durations)
 
 
-# Estimate a 95 percent confidence interval for the mean paired difference
 def _bootstrap_interval(values, rng, samples=5000):
+    """Estimate a confidence interval for the mean
+
+    Input is a list of paired differences and a random generator
+    Return lower and upper 95 percent bounds
+    """
     values = np.asarray(values, dtype=np.float64)
     if values.size < 2:
         return float("nan"), float("nan")
 
+    # Select new groups of results to estimate variation in the mean
     indices = rng.integers(0, values.size, size=(samples, values.size))
     means = np.mean(values[indices], axis=1)
     lower, upper = np.percentile(means, [2.5, 97.5])
@@ -71,6 +85,11 @@ def _bootstrap_interval(values, rng, samples=5000):
 
 
 def _parse_args():
+    """Read and check the experiment settings
+
+    Input comes from the command line
+    Return all settings in one namespace
+    """
     parser = argparse.ArgumentParser(
         description="Compare fixed-weight and noise-adaptive TV denoising"
     )
@@ -193,6 +212,12 @@ def _parse_args():
 
 
 def _project_path(path):
+    """Resolve a path from the project folder
+
+    Input is an absolute or relative path
+    Return the full path
+    """
+    # Save relative paths inside the project folder
     project_root = Path(__file__).resolve().parent
     if path.is_absolute():
         return path
@@ -200,14 +225,21 @@ def _project_path(path):
 
 
 def _candidate_scores(method, candidates, cases, args, case_writer):
+    """Score candidate settings on validation images
+
+    Input contains candidate values and paired validation cases
+    Return the mean MSE score for each candidate
+    """
     score_rows = []
 
+    # Try each possible setting on the same validation images
     for candidate in candidates:
         name = "baseline weight" if method == "baseline" else "adaptive alpha"
         print(f"Tuning {name} {candidate:g}")
         mse_by_sigma = {sigma: [] for sigma in args.sigmas}
 
         for sigma, seed, clean, noisy in cases:
+            # Score one candidate on one paired image case
             if method == "baseline":
                 denoised = denoise_tv(
                     noisy.copy(),
@@ -237,6 +269,7 @@ def _candidate_scores(method, candidates, cases, args, case_writer):
             str(sigma): float(np.mean(values))
             for sigma, values in mse_by_sigma.items()
         }
+        # Give each noise level equal weight in the selection score
         macro_mean_mse = float(np.mean(list(mean_mse_by_sigma.values())))
         score_rows.append(
             {
@@ -250,11 +283,19 @@ def _candidate_scores(method, candidates, cases, args, case_writer):
 
 
 def tune_validation_parameters(args):
+    """Select settings using validation images
+
+    Input is the experiment settings
+    Save case scores and selected values
+    Return the selected values and their scores
+    """
+    # Tuning must use validation data and not the final test cases
     args.split = "validation"
     seed_start = args.seed_start
     if seed_start is None:
         seed_start = SEED_STARTS["validation"]
 
+    # Create each validation image once so candidates see the same cases
     cases = []
     for sigma in args.sigmas:
         for seed in range(seed_start, seed_start + args.num_seeds):
@@ -269,6 +310,7 @@ def tune_validation_parameters(args):
     )
     tuning_csv_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Save the candidate scores so the parameter choice can be reviewed
     with tuning_csv_path.open("w", newline="", encoding="utf-8") as output_file:
         fields = ["method", "parameter_value", "noise_sigma", "seed", "mse"]
         writer = csv.DictWriter(output_file, fieldnames=fields)
@@ -281,6 +323,7 @@ def tune_validation_parameters(args):
             "adaptive", args.alpha_candidates, cases, args, writer
         )
 
+    # Choose the settings with the lowest validation error
     best_baseline = min(
         baseline_scores, key=lambda row: (row["macro_mean_mse"], row["value"])
     )
@@ -302,6 +345,7 @@ def tune_validation_parameters(args):
         "alpha_candidate_scores": adaptive_scores,
     }
 
+    # Save selected settings for the final test run
     config_path = _project_path(args.config_output)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     with config_path.open("w", encoding="utf-8") as config_file:
@@ -322,6 +366,12 @@ def tune_validation_parameters(args):
 
 
 def load_parameter_config(path):
+    """Load settings selected on validation images
+
+    Input is the path to a JSON file
+    Return the selected settings as a dictionary
+    """
+    # Read the saved validation settings from a JSON file
     config_path = _project_path(path)
     try:
         with config_path.open("r", encoding="utf-8") as config_file:
@@ -331,6 +381,7 @@ def load_parameter_config(path):
 
     if not isinstance(config, dict):
         raise ValueError("The parameter config must contain a JSON object")
+    # Do not accept settings selected using the final test cases
     if config.get("selection_split") != "validation":
         raise ValueError("The parameter config must record validation as its selection split")
     for name in ("baseline_weight", "alpha"):
@@ -346,6 +397,11 @@ def load_parameter_config(path):
 
 
 def run_experiments(args):
+    """Run paired denoising cases and save the scores
+
+    Input is the experiment settings
+    Save one CSV row for each seed and noise level
+    """
     seed_start = args.seed_start
     if seed_start is None:
         seed_start = SEED_STARTS[args.split]
@@ -360,6 +416,7 @@ def run_experiments(args):
     else:
         output_path = _project_path(args.output)
 
+    # Reuse each noisy image for both denoising methods
     rows = []
     for sigma in args.sigmas:
         for seed in range(seed_start, seed_start + args.num_seeds):
@@ -367,6 +424,10 @@ def run_experiments(args):
             clean, noisy = make_image(seed=seed, size=args.size, sigma=sigma)
 
             def run_baseline():
+                """Run baseline denoising on the current image
+
+                Return an image with the same shape as the input
+                """
                 return denoise_tv(
                     noisy.copy(),
                     weight=args.baseline_weight,
@@ -374,12 +435,17 @@ def run_experiments(args):
                 )
 
             def run_adaptive():
+                """Run adaptive denoising on the current image
+
+                Return the image noise estimate and selected weight
+                """
                 return denoise_tv_adaptive(
                     noisy.copy(),
                     alpha=args.alpha,
                     n_iter=args.iterations,
                 )
 
+            # Measure both methods on this same noisy image
             baseline_result, baseline_runtime = _timed_run(
                 run_baseline, args.timing_repeats
             )
@@ -387,11 +453,13 @@ def run_experiments(args):
                 _timed_run(run_adaptive, args.timing_repeats)
             )
 
+            # Compare each result with the known clean image
             baseline_mse = mean_squared_error(clean, baseline_result)
             baseline_psnr = psnr(clean, baseline_result)
             adaptive_mse = mean_squared_error(clean, adaptive_result)
             adaptive_psnr = psnr(clean, adaptive_result)
 
+            # Store scores and timing together as one paired result row
             rows.append(
                 {
                     "split": args.split,
@@ -417,12 +485,14 @@ def run_experiments(args):
                 }
             )
 
+    # Create the output folder before writing the CSV file
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as output_file:
         writer = csv.DictWriter(output_file, fieldnames=CSV_FIELDS)
         writer.writeheader()
         writer.writerows(rows)
 
+    # Use a fixed seed so the bootstrap intervals can be repeated
     bootstrap_rng = np.random.default_rng(20261119)
     print(f"\nSaved paired results to {output_path}")
     print("Positive MSE and PSNR gains favour the adaptive method")
@@ -431,6 +501,7 @@ def run_experiments(args):
         group = [row for row in rows if row["noise_sigma"] == sigma]
         mse_gains = [row["mse_gain_baseline_minus_adaptive"] for row in group]
         psnr_gains = [row["psnr_gain_adaptive_minus_baseline"] for row in group]
+        # Estimate uncertainty in the average paired improvements
         mse_interval = _bootstrap_interval(mse_gains, bootstrap_rng)
         psnr_interval = _bootstrap_interval(psnr_gains, bootstrap_rng)
         mean_baseline_time = float(
@@ -455,6 +526,7 @@ def run_experiments(args):
         )
 
 
+# Read command line settings only when this file is run as a script
 if __name__ == "__main__":
     arguments = _parse_args()
     if arguments.tune_validation:

@@ -3,9 +3,9 @@
 
 import numpy as np
 
-from src.baseline import denoise_tv
-from src.data import estimate_sigma, make_image
-from src.metrics import mean_squared_error, psnr
+from baseline import denoise_tv
+from data import estimate_sigma, make_image
+from metrics import mean_squared_error, psnr
 
 def _check_alpha(alpha):
     """Check the adaptive scale
@@ -68,7 +68,7 @@ def run_demo(
     baseline_weight=0.10,
     alpha=1.0,
     n_iter=200,
-    debug=True,
+    debug=False,
 ):
     """Compare the fixed and adaptive methods on one image
 
@@ -129,5 +129,6 @@ def run_demo(
     return clean, noisy, baseline_result, adaptive_result
 
 
+# Run this part only when this file is started directly
 if __name__ == "__main__":
     run_demo()

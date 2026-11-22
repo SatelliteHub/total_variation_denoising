@@ -4,8 +4,8 @@
 
 import numpy as np
 
-from src.data import estimate_sigma, make_image
-from src.metrics import mean_squared_error, psnr
+from data import estimate_sigma, make_image
+from metrics import mean_squared_error, psnr
 
 
 def check_image(image):
@@ -212,7 +212,7 @@ def rof_objective(noisy_image, reconstructed_image, weight):
     return float(data_cost + smoothness_cost)
 
 
-def run_demo(seed=0, size=96, sigma=0.1, weight=0.12, n_iter=200, debug=True):
+def run_demo(seed=0, size=96, sigma=0.1, weight=0.12, n_iter=200, debug=False):
     """Show one baseline denoising example
 
     Input settings choose the image and denoising strength
@@ -265,5 +265,6 @@ def run_demo(seed=0, size=96, sigma=0.1, weight=0.12, n_iter=200, debug=True):
     return clean, noisy, reconstructed
 
 
+# Run this part only when this file is started directly
 if __name__ == "__main__":
     run_demo()

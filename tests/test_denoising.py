@@ -1,11 +1,15 @@
 """Check the TV denoising operators and methods"""
 
+import sys
 import unittest
+from pathlib import Path
 
 import numpy as np
 
-from src.baseline import denoise_tv, div, grad
-from src.modified import denoise_tv_adaptive
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from baseline import denoise_tv, div, grad
+from modified import denoise_tv_adaptive
 
 
 class TestFiniteDifferenceOperators(unittest.TestCase):
@@ -103,6 +107,6 @@ class TestDenoisers(unittest.TestCase):
         np.testing.assert_array_equal(self.noisy, original)
 
 
-# Run the tests when this file is started directly
+# Run this part only when this file is started directly
 if __name__ == "__main__":
     unittest.main()

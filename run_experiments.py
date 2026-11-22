@@ -3,16 +3,19 @@
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 from statistics import median
 from time import perf_counter
 
 import numpy as np
 
-from src.baseline import denoise_tv
-from src.data import make_image
-from src.metrics import mean_squared_error, psnr
-from src.modified import denoise_tv_adaptive
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+
+from baseline import denoise_tv
+from data import make_image
+from metrics import mean_squared_error, psnr
+from modified import denoise_tv_adaptive
 
 
 # Keep the random seeds separate for each type of experiment
@@ -526,7 +529,7 @@ def run_experiments(args):
         )
 
 
-# Read command line settings only when this file is run as a script
+# Run this part only when this file is started directly
 if __name__ == "__main__":
     arguments = _parse_args()
     if arguments.tune_validation:

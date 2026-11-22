@@ -2,16 +2,19 @@
 
 import argparse
 import csv
+import sys
 from collections import defaultdict
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src.baseline import denoise_tv
-from src.data import make_image
-from src.metrics import mean_squared_error, psnr
-from src.modified import denoise_tv_adaptive
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+
+from baseline import denoise_tv
+from data import make_image
+from metrics import mean_squared_error, psnr
+from modified import denoise_tv_adaptive
 
 
 SUMMARY_FIELDS = [
@@ -420,5 +423,6 @@ def main():
         )
 
 
+# Run this part only when this file is started directly
 if __name__ == "__main__":
     main()

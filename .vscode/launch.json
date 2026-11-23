@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Baseline denoising demo",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/baseline.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
